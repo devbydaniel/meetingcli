@@ -27,6 +27,7 @@ type CreatedDevices struct {
 	MultiOutputID     uint32 `json:"multi_output_id"`
 	AggregateID       uint32 `json:"aggregate_id"`
 	AggregateUID      string `json:"aggregate_uid"`
+	AggregateName     string `json:"aggregate_name"`
 	OriginalOutputUID string `json:"original_output_uid"`
 	MicUID            string `json:"mic_uid"`
 }
@@ -142,6 +143,10 @@ func (dm *DeviceManager) CreateDevices(blackholeUID string) (*CreatedDevices, er
 	if err != nil {
 		return nil, err
 	}
+	aggregateName, err := getString(result, "aggregate_name")
+	if err != nil {
+		return nil, err
+	}
 	originalOutputUID, err := getString(result, "original_output_uid")
 	if err != nil {
 		return nil, err
@@ -155,6 +160,7 @@ func (dm *DeviceManager) CreateDevices(blackholeUID string) (*CreatedDevices, er
 		MultiOutputID:     uint32(multiOutputID),
 		AggregateID:       uint32(aggregateID),
 		AggregateUID:      aggregateUID,
+		AggregateName:     aggregateName,
 		OriginalOutputUID: originalOutputUID,
 		MicUID:            micUID,
 	}, nil

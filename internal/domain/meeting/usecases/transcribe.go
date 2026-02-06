@@ -49,6 +49,11 @@ func (t *Transcribe) Execute(audioPath string, meetingDir string) (*TranscriptRe
 		return nil, err
 	}
 
+	// Required when diarize is true
+	if err := writer.WriteField("timestamp_granularities[]", "segment"); err != nil {
+		return nil, err
+	}
+
 	// Add audio file
 	file, err := os.Open(audioPath)
 	if err != nil {

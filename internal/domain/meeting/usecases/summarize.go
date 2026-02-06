@@ -23,7 +23,7 @@ func (s *Summarize) Execute(transcript string, meetingDir string) (string, error
 	}
 
 	reqBody := anthropicRequest{
-		Model:     "claude-haiku-4-5-20241022",
+		Model:     "claude-haiku-4-5",
 		MaxTokens: 4096,
 		System:    s.SystemPrompt,
 		Messages: []anthropicMessage{

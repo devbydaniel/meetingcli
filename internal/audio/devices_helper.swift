@@ -184,7 +184,20 @@ func findBuiltInMic() -> String? {
     return nil
 }
 
+func destroyStaleDevices() {
+    // Clean up any leftover devices from a previous crashed session
+    let staleUIDs = ["com.meetingcli.aggregate", "com.meetingcli.multioutput"]
+    for device in getAllDevices() {
+        if let uid = getDeviceUID(device), staleUIDs.contains(uid) {
+            AudioHardwareDestroyAggregateDevice(device)
+        }
+    }
+}
+
 func createDevices(blackholeUID: String) {
+    // Clean up stale devices from previous crashed sessions
+    destroyStaleDevices()
+
     // Get current output device to include in multi-output
     guard let currentOutputID = getCurrentOutputDeviceID(),
           let currentOutputUID = getDeviceUID(currentOutputID) else {
@@ -226,7 +239,6 @@ func createDevices(blackholeUID: String) {
     let aggregateDesc: [String: Any] = [
         kAudioAggregateDeviceNameKey as String: "MeetingCLI-Aggregate",
         kAudioAggregateDeviceUIDKey as String: "com.meetingcli.aggregate",
-        kAudioAggregateDeviceIsPrivateKey as String: 1,
         kAudioAggregateDeviceSubDeviceListKey as String: aggregateSubs
     ]
 
@@ -261,6 +273,7 @@ func createDevices(blackholeUID: String) {
         "multi_output_id": multiOutputID,
         "aggregate_id": aggregateID,
         "aggregate_uid": "com.meetingcli.aggregate",
+        "aggregate_name": "MeetingCLI-Aggregate",
         "original_output_uid": currentOutputUID,
         "mic_uid": micUID
     ])

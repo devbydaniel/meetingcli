@@ -106,7 +106,7 @@ func (s *StartRecording) Execute(opts *StartOptions) (*meeting.RecordingState, e
 		}
 
 		// Record in foreground (blocks until SIGINT)
-		_ = s.Recorder.StartForeground(devices.AggregateUID, audioPath)
+		_ = s.Recorder.StartForeground(devices.AggregateName, audioPath)
 
 		// Clean up after recording
 		s.restoreAndCleanup(devices)
@@ -116,7 +116,7 @@ func (s *StartRecording) Execute(opts *StartOptions) (*meeting.RecordingState, e
 	}
 
 	// Async: start background process
-	proc, err := s.Recorder.StartBackground(devices.AggregateUID, audioPath)
+	proc, err := s.Recorder.StartBackground(devices.AggregateName, audioPath)
 	if err != nil {
 		s.cleanup(devices)
 		return nil, fmt.Errorf("starting recording: %w", err)

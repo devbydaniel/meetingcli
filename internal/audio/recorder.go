@@ -25,11 +25,11 @@ func (r *Recorder) CheckFFmpeg() error {
 }
 
 // StartBackground starts ffmpeg recording in the background and returns the process.
-// Records from the given aggregate device to outputPath as 16kHz mono WAV.
-func (r *Recorder) StartBackground(aggregateUID string, outputPath string) (*os.Process, error) {
+// Records from the given aggregate device (by name) to outputPath as 16kHz mono WAV.
+func (r *Recorder) StartBackground(deviceName string, outputPath string) (*os.Process, error) {
 	args := []string{
 		"-f", "avfoundation",
-		"-i", ":" + aggregateUID,
+		"-i", ":" + deviceName,
 		"-ac", "1",
 		"-ar", "16000",
 		"-y", // overwrite
@@ -37,23 +37,41 @@ func (r *Recorder) StartBackground(aggregateUID string, outputPath string) (*os.
 	}
 
 	cmd := exec.Command("ffmpeg", args...)
-	// Redirect stderr to /dev/null to avoid ffmpeg noise
-	cmd.Stderr = nil
 	cmd.Stdout = nil
 
+	// Log stderr to file next to the recording for diagnostics
+	logPath := outputPath + ".ffmpeg.log"
+	logFile, err := os.Create(logPath)
+	if err != nil {
+		cmd.Stderr = nil
+	} else {
+		cmd.Stderr = logFile
+	}
+
 	if err := cmd.Start(); err != nil {
+		if logFile != nil {
+			logFile.Close()
+		}
 		return nil, fmt.Errorf("starting ffmpeg: %w", err)
 	}
+
+	// Close log file when process exits (in background)
+	go func() {
+		cmd.Wait()
+		if logFile != nil {
+			logFile.Close()
+		}
+	}()
 
 	return cmd.Process, nil
 }
 
 // StartForeground starts ffmpeg recording in the foreground (blocking).
 // Returns when the process exits (e.g., after receiving SIGINT).
-func (r *Recorder) StartForeground(aggregateUID string, outputPath string) error {
+func (r *Recorder) StartForeground(deviceName string, outputPath string) error {
 	args := []string{
 		"-f", "avfoundation",
-		"-i", ":" + aggregateUID,
+		"-i", ":" + deviceName,
 		"-ac", "1",
 		"-ar", "16000",
 		"-y",
