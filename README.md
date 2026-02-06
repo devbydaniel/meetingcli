@@ -46,11 +46,13 @@ anthropic_api_key = "your-key"
 ## Usage
 
 ```bash
-meeting start                    # record, Ctrl+C to stop → transcribe → summarize
-meeting start --name "standup"   # with a name
+meeting                          # record, Ctrl+C to stop → transcribe → summarize
+meeting --name "standup"         # with a name
 meeting list                     # list past meetings
 meeting doctor                   # check prerequisites
 ```
+
+`meeting start` also works as an alias for `meeting`.
 
 ## How it works
 
