@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/devbydaniel/meetingcli/compare/v1.0.0...v1.1.0) (2026-02-06)
+
+
+### Features
+
+* run recording when calling meeting without subcommand ([fa9158d](https://github.com/devbydaniel/meetingcli/commit/fa9158dc230210d442e1b139378b686161fe6f31))
+
 ## 1.0.0 (2026-02-06)
 
 
