@@ -1,0 +1,21 @@
+# Binary
+/meeting
+
+# Dev data
+dev-meetings/
+
+# OS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Go
+vendor/
+
+# Temp
+/tmp/
+dist/
