@@ -109,7 +109,7 @@ func (t *Transcribe) Execute(audioPath string, meetingDir string) (*TranscriptRe
 	// Extract diarized segments if available
 	for _, seg := range apiResp.Segments {
 		result.Segments = append(result.Segments, TranscriptSegment{
-			Speaker: seg.Speaker,
+			Speaker: seg.SpeakerID,
 			Text:    seg.Text,
 		})
 	}
@@ -154,7 +154,9 @@ func formatTranscript(result *TranscriptResult) string {
 type transcriptionAPIResponse struct {
 	Text     string `json:"text"`
 	Segments []struct {
-		Speaker string `json:"speaker"`
-		Text    string `json:"text"`
+		SpeakerID string  `json:"speaker_id"`
+		Text      string  `json:"text"`
+		Start     float64 `json:"start"`
+		End       float64 `json:"end"`
 	} `json:"segments"`
 }
