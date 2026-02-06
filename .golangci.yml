@@ -14,6 +14,7 @@ linters:
       check-type-assertions: true
     gocritic:
       disabled-checks:
+        - dupImport
         - hugeParam
         - rangeValCopy
         - singleCaseSwitch
