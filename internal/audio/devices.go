@@ -6,7 +6,7 @@ package audio
 #include <stdlib.h>
 #include "capture_darwin.h"
 */
-import "C"
+import "C" //nolint:gocritic // CGO requires separate import block
 
 import (
 	"fmt"

@@ -115,16 +115,6 @@ func defaultMeetingsDir() string {
 	return filepath.Join(".", "meetings")
 }
 
-func defaultStateDir() string {
-	if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-		return filepath.Join(xdg, "meetingcli")
-	}
-	if home, err := os.UserHomeDir(); err == nil {
-		return filepath.Join(home, ".local", "share", "meetingcli")
-	}
-	return filepath.Join(".", ".meetingcli")
-}
-
 func expandTilde(path string) string {
 	if strings.HasPrefix(path, "~/") {
 		if home, err := os.UserHomeDir(); err == nil {
