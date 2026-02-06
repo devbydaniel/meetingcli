@@ -8,13 +8,11 @@ import (
 	"github.com/devbydaniel/meetingcli/internal/version"
 )
 
-// Dependencies holds shared dependencies for all CLI commands.
 type Dependencies struct {
 	App    *app.App
 	Config *config.Config
 }
 
-// NewRootCmd creates the root cobra command with all subcommands.
 func NewRootCmd(deps *Dependencies) *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "meeting",
@@ -26,7 +24,6 @@ func NewRootCmd(deps *Dependencies) *cobra.Command {
 	rootCmd.SetVersionTemplate(version.Full() + "\n")
 
 	rootCmd.AddCommand(NewStartCmd(deps))
-	rootCmd.AddCommand(NewStopCmd(deps))
 	rootCmd.AddCommand(NewListCmd(deps))
 	rootCmd.AddCommand(NewDoctorCmd(deps))
 

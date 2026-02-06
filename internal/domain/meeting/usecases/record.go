@@ -2,10 +2,11 @@ package usecases
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"text/template"
 	"time"
 
@@ -13,132 +14,92 @@ import (
 	"github.com/devbydaniel/meetingcli/internal/domain/meeting"
 )
 
-// StartRecording manages starting a meeting recording.
-type StartRecording struct {
-	DeviceManager  *audio.DeviceManager
+// Record handles recording a meeting. Foreground only — blocks until Ctrl+C.
+type Record struct {
+	Capturer       *audio.SystemAudioCapturer
 	Recorder       *audio.Recorder
 	MeetingsDir    string
-	StateDir       string
 	FolderTemplate string
 }
 
-// FolderTemplateData holds the template variables available for folder naming.
+type RecordOptions struct {
+	Name string
+}
+
 type FolderTemplateData struct {
-	Year   string
-	Month  string
-	Day    string
-	Hour   string
-	Minute string
-	Second string
-	Name   string
+	Year, Month, Day, Hour, Minute, Second, Name string
 }
 
-// StartOptions holds options for starting a recording.
-type StartOptions struct {
-	Name string // optional meeting name suffix
-	Sync bool   // if true, record in foreground
-}
-
-func (s *StartRecording) stateFilePath() string {
-	return filepath.Join(s.StateDir, "current.json")
-}
-
-// IsRecording checks if a recording is currently active.
-func (s *StartRecording) IsRecording() bool {
-	_, err := os.Stat(s.stateFilePath())
-	return err == nil
-}
-
-// Execute starts a new recording session.
-// In async mode, returns immediately after starting the background process.
-// In sync mode, blocks until the recording is stopped (via SIGINT).
-func (s *StartRecording) Execute(opts *StartOptions) (*meeting.RecordingState, error) {
-	if s.IsRecording() {
-		return nil, fmt.Errorf("a recording is already in progress. Run 'meeting stop' first")
-	}
-
-	// Check prerequisites
-	if err := s.Recorder.CheckFFmpeg(); err != nil {
+// Execute runs a recording session. Blocks until interrupted (Ctrl+C).
+// Returns the result with paths to the merged audio and meeting dir.
+func (r *Record) Execute(opts *RecordOptions) (*meeting.RecordingResult, error) {
+	if err := r.Recorder.CheckFFmpeg(); err != nil {
 		return nil, err
-	}
-
-	// Find BlackHole
-	bh, err := s.DeviceManager.FindBlackhole()
-	if err != nil {
-		return nil, fmt.Errorf("BlackHole 2ch not found: %w\nInstall with: brew install blackhole-2ch", err)
-	}
-
-	// Create audio devices
-	devices, err := s.DeviceManager.CreateDevices(bh.UID)
-	if err != nil {
-		return nil, fmt.Errorf("creating audio devices: %w", err)
 	}
 
 	// Create meeting directory
 	now := time.Now()
-	dirName, err := s.renderFolderName(now, opts.Name)
+	dirName, err := r.renderFolderName(now, opts.Name)
 	if err != nil {
-		s.cleanup(devices)
 		return nil, fmt.Errorf("rendering folder name: %w", err)
 	}
-	meetingDir := filepath.Join(s.MeetingsDir, dirName)
+	meetingDir := filepath.Join(r.MeetingsDir, dirName)
 	if err := os.MkdirAll(meetingDir, 0o755); err != nil {
-		s.cleanup(devices)
 		return nil, fmt.Errorf("creating meeting directory: %w", err)
 	}
 
+	micPath := filepath.Join(meetingDir, "mic.wav")
+	systemPath := filepath.Join(meetingDir, "system.wav")
 	audioPath := filepath.Join(meetingDir, "recording.wav")
 
-	state := &meeting.RecordingState{
-		StartedAt:         now,
-		AudioPath:         audioPath,
-		MeetingDir:        meetingDir,
-		OriginalOutputUID: devices.OriginalOutputUID,
-		MultiOutputID:     devices.MultiOutputID,
-		AggregateID:       devices.AggregateID,
-	}
-
-	if opts.Sync {
-		// Write state so cleanup can happen even on crash
-		if err := s.writeState(state); err != nil {
-			s.cleanup(devices)
-			return nil, err
-		}
-
-		// Record in foreground (blocks until SIGINT)
-		_ = s.Recorder.StartForeground(devices.AggregateName, audioPath)
-
-		// Clean up after recording
-		s.restoreAndCleanup(devices)
-		s.removeState()
-
-		return state, nil
-	}
-
-	// Async: start background process
-	proc, err := s.Recorder.StartBackground(devices.AggregateName, audioPath)
-	if err != nil {
-		s.cleanup(devices)
-		return nil, fmt.Errorf("starting recording: %w", err)
-	}
-
-	state.PID = proc.Pid
-
-	// Save state
-	if err := s.writeState(state); err != nil {
-		_ = proc.Kill()
-		s.cleanup(devices)
+	// Start system audio capture (cgo, streams to disk)
+	if err := r.Capturer.StartCapture(systemPath); err != nil {
 		return nil, err
 	}
 
-	// Release the process so it continues in background
-	_ = proc.Release()
+	// Record mic in foreground — blocks until SIGINT
+	// We trap SIGINT ourselves so we can clean up both streams.
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	return state, nil
+	micDone := make(chan error, 1)
+	go func() {
+		micDone <- r.Recorder.RecordMic(micPath)
+	}()
+
+	// Wait for interrupt or mic to stop
+	select {
+	case <-sigCh:
+		// User pressed Ctrl+C
+	case <-micDone:
+		// ffmpeg exited on its own (unlikely)
+	}
+	signal.Stop(sigCh)
+
+	// Stop system audio capture and finalize WAV
+	r.Capturer.StopCapture()
+
+	// Wait for ffmpeg to finish (it also gets the SIGINT)
+	<-micDone
+
+	// Merge system + mic into recording.wav
+	if err := r.Recorder.MergeAudio(systemPath, micPath, audioPath); err != nil {
+		// Fall back to mic-only
+		fmt.Fprintf(os.Stderr, "warning: could not merge audio: %v\n", err)
+		if _, statErr := os.Stat(micPath); statErr == nil {
+			_ = os.Rename(micPath, audioPath)
+		}
+	}
+
+	return &meeting.RecordingResult{
+		StartedAt:  now,
+		AudioPath:  audioPath,
+		MeetingDir: meetingDir,
+	}, nil
 }
 
-func (s *StartRecording) renderFolderName(t time.Time, name string) (string, error) {
-	tmpl, err := template.New("folder").Parse(s.FolderTemplate)
+func (r *Record) renderFolderName(t time.Time, name string) (string, error) {
+	tmpl, err := template.New("folder").Parse(r.FolderTemplate)
 	if err != nil {
 		return "", fmt.Errorf("invalid folder template: %w", err)
 	}
@@ -158,72 +119,4 @@ func (s *StartRecording) renderFolderName(t time.Time, name string) (string, err
 		return "", fmt.Errorf("executing folder template: %w", err)
 	}
 	return buf.String(), nil
-}
-
-func (s *StartRecording) writeState(state *meeting.RecordingState) error {
-	data, err := json.MarshalIndent(state, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshaling state: %w", err)
-	}
-	return os.WriteFile(s.stateFilePath(), data, 0o644)
-}
-
-func (s *StartRecording) removeState() {
-	os.Remove(s.stateFilePath())
-}
-
-func (s *StartRecording) cleanup(devices *audio.CreatedDevices) {
-	_ = s.DeviceManager.DestroyDevices(devices.MultiOutputID, devices.AggregateID)
-}
-
-func (s *StartRecording) restoreAndCleanup(devices *audio.CreatedDevices) {
-	_ = s.DeviceManager.SwitchOutput(devices.OriginalOutputUID)
-	_ = s.DeviceManager.DestroyDevices(devices.MultiOutputID, devices.AggregateID)
-}
-
-// StopRecording manages stopping a meeting recording.
-type StopRecording struct {
-	DeviceManager *audio.DeviceManager
-	Recorder      *audio.Recorder
-	StateDir      string
-}
-
-func (s *StopRecording) stateFilePath() string {
-	return filepath.Join(s.StateDir, "current.json")
-}
-
-// Execute stops the current recording and returns the state for processing.
-func (s *StopRecording) Execute() (*meeting.RecordingState, error) {
-	data, err := os.ReadFile(s.stateFilePath())
-	if err != nil {
-		return nil, fmt.Errorf("no active recording found")
-	}
-
-	var state meeting.RecordingState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("reading recording state: %w", err)
-	}
-
-	// Stop ffmpeg
-	if state.PID > 0 {
-		if err := s.Recorder.StopProcess(state.PID); err != nil {
-			// Process may have died — continue with cleanup
-			fmt.Fprintf(os.Stderr, "warning: could not stop recording process: %v\n", err)
-		}
-	}
-
-	// Restore audio output
-	if state.OriginalOutputUID != "" {
-		_ = s.DeviceManager.SwitchOutput(state.OriginalOutputUID)
-	}
-
-	// Destroy audio devices
-	if state.MultiOutputID > 0 || state.AggregateID > 0 {
-		_ = s.DeviceManager.DestroyDevices(state.MultiOutputID, state.AggregateID)
-	}
-
-	// Remove state file
-	os.Remove(s.stateFilePath())
-
-	return &state, nil
 }

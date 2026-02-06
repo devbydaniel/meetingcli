@@ -33,7 +33,6 @@ type Config struct {
 	MeetingsDir    string
 	MistralAPIKey  string
 	AnthropicKey   string
-	StateDir       string // internal state (current.json)
 	SummaryPrompt  string // system prompt for summary generation
 	FolderTemplate string // Go template for meeting folder names
 }
@@ -49,7 +48,6 @@ type fileConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		MeetingsDir:    defaultMeetingsDir(),
-		StateDir:       defaultStateDir(),
 		SummaryPrompt:  DefaultSummaryPrompt,
 		FolderTemplate: DefaultFolderTemplate,
 	}
@@ -75,9 +73,6 @@ func Load() (*Config, error) {
 
 	// Ensure directories exist
 	if err := os.MkdirAll(cfg.MeetingsDir, 0o755); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(cfg.StateDir, 0o755); err != nil {
 		return nil, err
 	}
 

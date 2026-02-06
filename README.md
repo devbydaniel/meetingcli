@@ -20,17 +20,16 @@ make build
 
 ```bash
 brew install ffmpeg
-brew install blackhole-2ch
 ```
 
-- **ffmpeg** — records audio from system devices
-- **BlackHole 2ch** — virtual audio driver that captures system audio (other participants' voices in calls)
+- **ffmpeg** — records mic audio and merges audio streams
+- **Screen recording permission** — required for system audio capture (macOS will prompt on first use)
 
 Run `meeting doctor` to verify everything is ready.
 
 ## Setup
 
-Set your API keys via environment variables or config file:
+Set your API keys:
 
 ```bash
 export MEETINGCLI_MISTRAL_API_KEY="your-key"
@@ -46,97 +45,53 @@ anthropic_api_key = "your-key"
 
 ## Usage
 
-### Record a meeting (background)
-
 ```bash
-meeting start                    # starts recording in background
-meeting stop                     # stops, transcribes, and summarizes
-```
-
-### Record a meeting (foreground)
-
-```bash
-meeting start --sync             # records until Ctrl+C, then processes
-```
-
-### Name a meeting
-
-```bash
-meeting start --name "standup"   # folder: 2026-02-06_14-00-00_standup/
-```
-
-### List past meetings
-
-```bash
-meeting list
-```
-
-### Check prerequisites
-
-```bash
-meeting doctor
+meeting start                    # record, Ctrl+C to stop → transcribe → summarize
+meeting start --name "standup"   # with a name
+meeting list                     # list past meetings
+meeting doctor                   # check prerequisites
 ```
 
 ## How it works
 
-When you start a recording, meetingcli:
+`meeting start` captures two audio streams in parallel:
 
-1. Finds the BlackHole virtual audio device
-2. Creates temporary audio devices via CoreAudio:
-   - **Multi-Output** (your speakers/headphones + BlackHole) — so system audio flows to both your ears and BlackHole
-   - **Aggregate** (BlackHole + your mic) — combines system audio and mic into one recordable input
-3. Switches your system output to the Multi-Output device
-4. Records from the Aggregate device via ffmpeg
+1. **System audio** — via ScreenCaptureKit (macOS 12.3+), taps directly into the OS audio mixer. Works with any output device including Bluetooth headphones.
+2. **Mic audio** — via ffmpeg from the default input device.
 
-When you stop:
+Press Ctrl+C to stop. The tool then:
 
-1. Stops the recording and restores your original audio output
-2. Destroys the temporary audio devices
-3. Uploads audio to Mistral Voxtral for transcription with speaker diarization
-4. Sends the transcript to Claude Haiku 4.5 for summarization
+1. Merges system + mic audio into `recording.wav`
+2. Transcribes via Mistral Voxtral (with speaker diarization)
+3. Summarizes via Claude Haiku 4.5
 
-Each meeting produces a folder:
+Each meeting produces:
 
 ```
 ~/meetings/2026-02-06_14-00-00/
-├── recording.wav
+├── recording.wav      # merged (used for transcription)
+├── system.wav         # system audio
+├── mic.wav            # mic audio
 ├── transcript.md
 └── summary.md
 ```
 
 ## Configuration
 
-Config file: `~/.config/meetingcli/config.toml`
+`~/.config/meetingcli/config.toml`:
 
 ```toml
-# Where meeting folders are created (default: ~/meetings)
 meetings_dir = "~/meetings"
-
-# API keys (or use MEETINGCLI_MISTRAL_API_KEY / MEETINGCLI_ANTHROPIC_API_KEY env vars)
 mistral_api_key = ""
 anthropic_api_key = ""
-
-# Folder name template
-# Available: {{.Year}}, {{.Month}}, {{.Day}}, {{.Hour}}, {{.Minute}}, {{.Second}}, {{.Name}}
 folder_template = "{{.Year}}-{{.Month}}-{{.Day}}_{{.Hour}}-{{.Minute}}-{{.Second}}{{if .Name}}_{{.Name}}{{end}}"
-
-# Custom system prompt for summary generation (replaces default)
-# summary_prompt = "Summarize this meeting as bullet points."
+# summary_prompt = "Custom prompt here"
 ```
-
-### Folder template examples
-
-| Template | Result |
-|---|---|
-| `{{.Year}}-{{.Month}}-{{.Day}}_{{.Hour}}-{{.Minute}}-{{.Second}}` | `2026-02-06_14-00-00` |
-| `{{.Year}}{{.Month}}{{.Day}}-{{.Name}}` | `20260206-standup` |
-| `{{.Year}}/{{.Month}}/{{.Day}}_{{.Hour}}-{{.Minute}}` | `2026/02/06_14-00` (nested dirs) |
 
 ## Requirements
 
-- macOS (uses CoreAudio for audio device management)
+- macOS 12.3+
 - [ffmpeg](https://ffmpeg.org/)
-- [BlackHole 2ch](https://existential.audio/blackhole/)
 - [Mistral API key](https://console.mistral.ai/)
 - [Anthropic API key](https://console.anthropic.com/)
 

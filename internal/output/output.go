@@ -4,30 +4,14 @@ import (
 	"fmt"
 	"io"
 	"time"
-
-	"github.com/devbydaniel/meetingcli/internal/domain/meeting"
 )
 
-// Formatter handles all user-facing output.
 type Formatter struct {
 	w io.Writer
 }
 
-// NewFormatter creates a new Formatter.
 func NewFormatter(w io.Writer) *Formatter {
 	return &Formatter{w: w}
-}
-
-func (f *Formatter) RecordingStarted(state *meeting.RecordingState, sync bool) {
-	if sync {
-		fmt.Fprintf(f.w, "🎙️  Recording started (sync mode)\n")
-		fmt.Fprintf(f.w, "   Press Ctrl+C to stop recording\n")
-		fmt.Fprintf(f.w, "   Audio: %s\n", state.AudioPath)
-	} else {
-		fmt.Fprintf(f.w, "🎙️  Recording started in background\n")
-		fmt.Fprintf(f.w, "   Run 'meeting stop' to stop and process\n")
-		fmt.Fprintf(f.w, "   Audio: %s\n", state.AudioPath)
-	}
 }
 
 func (f *Formatter) RecordingStopped(duration time.Duration) {
