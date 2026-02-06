@@ -26,7 +26,7 @@ brew install blackhole-2ch
 - **ffmpeg** — records audio from system devices
 - **BlackHole 2ch** — virtual audio driver that captures system audio (other participants' voices in calls)
 
-Run `meeting setup` to verify everything is ready.
+Run `meeting doctor` to verify everything is ready.
 
 ## Setup
 
@@ -74,7 +74,7 @@ meeting list
 ### Check prerequisites
 
 ```bash
-meeting setup
+meeting doctor
 ```
 
 ## How it works

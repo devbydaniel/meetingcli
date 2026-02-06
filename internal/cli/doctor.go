@@ -23,9 +23,9 @@ func isBlackholeInstalledButNotLoaded() bool {
 	return false
 }
 
-func NewSetupCmd(deps *Dependencies) *cobra.Command {
+func NewDoctorCmd(deps *Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "setup",
+		Use:   "doctor",
 		Short: "Check prerequisites for recording",
 		Long:  "Verify that ffmpeg and BlackHole 2ch are installed and working.",
 		RunE: func(cmd *cobra.Command, args []string) error {
